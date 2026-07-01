@@ -1,5 +1,5 @@
 const Application = require("../models/Application");
-const Job = require("../models/Job12");
+const Job = require("../models/Job");
 
 // @desc    Apply for a job
 // @route   POST /api/applications/:jobId
