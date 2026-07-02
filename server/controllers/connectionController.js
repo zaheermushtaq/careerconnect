@@ -1,5 +1,9 @@
 const Connection = require("../models/Connection");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
+
+// We will get io from app locals (set up in index.js)
+const { sendNotificationToUser } = require("../utils/socket");
 
 // @desc    Send a connection request
 // @route   POST /api/connections/send/:userId
@@ -9,7 +13,6 @@ const sendConnectionRequest = async (req, res) => {
     const receiverId = req.params.userId;
     const senderId = req.user.id;
 
-    // Cannot send request to yourself
     if (senderId === receiverId) {
       return res.status(400).json({
         success: false,
@@ -17,7 +20,6 @@ const sendConnectionRequest = async (req, res) => {
       });
     }
 
-    // Check if receiver exists
     const receiver = await User.findById(receiverId);
     if (!receiver) {
       return res.status(404).json({
@@ -26,7 +28,6 @@ const sendConnectionRequest = async (req, res) => {
       });
     }
 
-    // Check if a connection request already exists between these two users
     const existingConnection = await Connection.findOne({
       $or: [
         { sender: senderId, receiver: receiverId },
@@ -47,7 +48,6 @@ const sendConnectionRequest = async (req, res) => {
           message: "You are already connected with this user",
         });
       }
-      // If previously rejected, allow sending again
       if (existingConnection.status === "rejected") {
         existingConnection.status = "pending";
         existingConnection.sender = senderId;
@@ -61,10 +61,25 @@ const sendConnectionRequest = async (req, res) => {
       }
     }
 
-    // Create new connection request
     const connection = await Connection.create({
       sender: senderId,
       receiver: receiverId,
+    });
+
+    // Create notification in database
+    const notification = await Notification.create({
+      recipient: receiverId,
+      sender: senderId,
+      type: "connection_request",
+      message: `${req.user.name} sent you a connection request`,
+      link: `/profile/${senderId}`,
+    });
+
+    // Send real-time notification if user is online
+    const io = req.app.get("io");
+    sendNotificationToUser(io, receiverId, {
+      ...notification.toObject(),
+      sender: { _id: req.user.id, name: req.user.name },
     });
 
     res.status(201).json({
@@ -83,12 +98,11 @@ const sendConnectionRequest = async (req, res) => {
 
 // @desc    Accept or reject a connection request
 // @route   PUT /api/connections/:connectionId
-// @access  Private (receiver only)
+// @access  Private
 const respondToRequest = async (req, res) => {
   try {
     const { status } = req.body;
 
-    // Only these two values are allowed
     if (!["accepted", "rejected"].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -105,7 +119,6 @@ const respondToRequest = async (req, res) => {
       });
     }
 
-    // Only the receiver can accept or reject
     if (connection.receiver.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
@@ -113,7 +126,6 @@ const respondToRequest = async (req, res) => {
       });
     }
 
-    // Can only respond to pending requests
     if (connection.status !== "pending") {
       return res.status(400).json({
         success: false,
@@ -123,6 +135,23 @@ const respondToRequest = async (req, res) => {
 
     connection.status = status;
     await connection.save();
+
+    // Only send notification if request was accepted
+    if (status === "accepted") {
+      const notification = await Notification.create({
+        recipient: connection.sender,
+        sender: req.user.id,
+        type: "connection_accepted",
+        message: `${req.user.name} accepted your connection request`,
+        link: `/profile/${req.user.id}`,
+      });
+
+      const io = req.app.get("io");
+      sendNotificationToUser(io, connection.sender.toString(), {
+        ...notification.toObject(),
+        sender: { _id: req.user.id, name: req.user.name },
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -138,7 +167,7 @@ const respondToRequest = async (req, res) => {
   }
 };
 
-// @desc    Get all pending connection requests received by logged in user
+// @desc    Get all pending connection requests received
 // @route   GET /api/connections/requests
 // @access  Private
 const getConnectionRequests = async (req, res) => {
@@ -162,12 +191,11 @@ const getConnectionRequests = async (req, res) => {
   }
 };
 
-// @desc    Get all accepted connections of logged in user
+// @desc    Get all accepted connections
 // @route   GET /api/connections
 // @access  Private
 const getMyConnections = async (req, res) => {
   try {
-    // Find all accepted connections where user is either sender or receiver
     const connections = await Connection.find({
       $or: [
         { sender: req.user.id, status: "accepted" },
@@ -177,13 +205,11 @@ const getMyConnections = async (req, res) => {
       .populate("sender", "name email profilePicture bio role")
       .populate("receiver", "name email profilePicture bio role");
 
-    // Extract the "other person" from each connection
-    // If I am the sender, the other person is the receiver, and vice versa
     const myConnections = connections.map((conn) => {
-      const issender = conn.sender._id.toString() === req.user.id;
+      const isSender = conn.sender._id.toString() === req.user.id;
       return {
         connectionId: conn._id,
-        connectedUser: issender ? conn.receiver : conn.sender,
+        connectedUser: isSender ? conn.receiver : conn.sender,
         connectedSince: conn.updatedAt,
       };
     });
@@ -216,7 +242,6 @@ const removeConnection = async (req, res) => {
       });
     }
 
-    // Only sender or receiver can remove the connection
     const isSender = connection.sender.toString() === req.user.id;
     const isReceiver = connection.receiver.toString() === req.user.id;
 
@@ -242,7 +267,7 @@ const removeConnection = async (req, res) => {
   }
 };
 
-// @desc    Get connection status between logged in user and another user
+// @desc    Get connection status between two users
 // @route   GET /api/connections/status/:userId
 // @access  Private
 const getConnectionStatus = async (req, res) => {
@@ -265,7 +290,6 @@ const getConnectionStatus = async (req, res) => {
       success: true,
       status: connection.status,
       connectionId: connection._id,
-      // Tell the frontend who sent the request
       isSender: connection.sender.toString() === req.user.id,
     });
   } catch (error) {

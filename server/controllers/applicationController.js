@@ -1,12 +1,13 @@
 const Application = require("../models/Application");
 const Job = require("../models/Job");
+const Notification = require("../models/Notification");
+const { sendNotificationToUser } = require("../utils/socket");
 
 // @desc    Apply for a job
 // @route   POST /api/applications/:jobId
 // @access  Private (jobseekers only)
 const applyForJob = async (req, res) => {
   try {
-    // Only jobseekers can apply
     if (req.user.role !== "jobseeker") {
       return res.status(403).json({
         success: false,
@@ -30,7 +31,6 @@ const applyForJob = async (req, res) => {
       });
     }
 
-    // Check if user already applied
     const existingApplication = await Application.findOne({
       job: req.params.jobId,
       applicant: req.user.id,
@@ -45,7 +45,6 @@ const applyForJob = async (req, res) => {
 
     const { coverLetter, resume } = req.body;
 
-    // Resume is required
     if (!resume && !req.user.resume) {
       return res.status(400).json({
         success: false,
@@ -67,7 +66,6 @@ const applyForJob = async (req, res) => {
       application,
     });
   } catch (error) {
-    // Handle duplicate application at database level
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -126,7 +124,6 @@ const getJobApplications = async (req, res) => {
       });
     }
 
-    // Only the recruiter who posted this job can see its applications
     if (job.postedBy.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
@@ -159,7 +156,14 @@ const updateApplicationStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
-    const validStatuses = ["pending", "reviewing", "shortlisted", "rejected", "hired"];
+    const validStatuses = [
+      "pending",
+      "reviewing",
+      "shortlisted",
+      "rejected",
+      "hired",
+    ];
+
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -176,7 +180,6 @@ const updateApplicationStatus = async (req, res) => {
       });
     }
 
-    // Only the recruiter linked to this application can update it
     if (application.recruiter.toString() !== req.user.id) {
       return res.status(403).json({
         success: false,
@@ -186,6 +189,22 @@ const updateApplicationStatus = async (req, res) => {
 
     application.status = status;
     await application.save();
+
+    // Create notification in database
+    const notification = await Notification.create({
+      recipient: application.applicant,
+      sender: req.user.id,
+      type: "application_status",
+      message: `Your application status has been updated to "${status}"`,
+      link: `/applications/my-applications`,
+    });
+
+    // Send real-time notification if applicant is online
+    const io = req.app.get("io");
+    sendNotificationToUser(io, application.applicant.toString(), {
+      ...notification.toObject(),
+      sender: { _id: req.user.id, name: req.user.name },
+    });
 
     res.status(200).json({
       success: true,
