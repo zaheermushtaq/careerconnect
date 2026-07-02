@@ -1,0 +1,29 @@
+const mongoose = require("mongoose");
+
+const ConnectionSchema = new mongoose.Schema(
+  {
+    sender: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    receiver: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ["pending", "accepted", "rejected"],
+      default: "pending",
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Prevent duplicate connection requests between same two users
+ConnectionSchema.index({ sender: 1, receiver: 1 }, { unique: true });
+
+module.exports = mongoose.model("Connection", ConnectionSchema);
