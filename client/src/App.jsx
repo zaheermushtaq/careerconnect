@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "./components/ui/sonner";
 
 // Pages
+import PostJobPage from "./pages/PostJobPage";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -35,6 +36,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/post-job"
+            element={
+              <ProtectedRoute recruiterOnly={true}>
+                <PostJobPage />
               </ProtectedRoute>
             }
           />
