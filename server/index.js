@@ -36,7 +36,10 @@ app.set("io", io);
 // Initialize all socket event listeners
 initializeSocket(io);
 
-app.use(cors());
+app.use(cors({
+  origin: 'https://careerconnect-amber.vercel.app',
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
