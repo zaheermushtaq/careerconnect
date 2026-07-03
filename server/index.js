@@ -22,12 +22,34 @@ const app = express();
 // Socket.io needs an HTTP server, not just Express app
 const server = http.createServer(app);
 
-// Initialize Socket.io on the HTTP server
-const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:5173", // React frontend URL (Vite default port)
-    methods: ["GET", "POST"],
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://careerconnect-amber.vercel.app",
+];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, or postman)
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      (origin.includes("careerconnect") && origin.endsWith(".vercel.app"));
+                      
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
   },
+  credentials: true
+};
+
+// Initialize Socket.io on the HTTP server with dynamic CORS
+const io = new Server(server, {
+  cors: corsOptions,
 });
 
 // Store io instance in app so controllers can access it via req.app.get("io")
@@ -36,10 +58,7 @@ app.set("io", io);
 // Initialize all socket event listeners
 initializeSocket(io);
 
-app.use(cors({
-  origin: 'https://careerconnect-amber.vercel.app',
-  credentials: true
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes
