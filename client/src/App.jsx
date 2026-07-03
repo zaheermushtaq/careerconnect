@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { Toaster } from "./components/ui/sonner";
 
 // Pages
 import HomePage from "./pages/HomePage";
@@ -18,8 +19,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Toaster />
         <Routes>
-          {/* Public routes — anyone can visit */}
+          {/* Public routes */}
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -27,7 +29,7 @@ function App() {
           <Route path="/jobs/:id" element={<JobDetailPage />} />
           <Route path="/companies" element={<CompaniesPage />} />
 
-          {/* Protected routes — must be logged in */}
+          {/* Protected routes */}
           <Route
             path="/profile/:id"
             element={
@@ -53,7 +55,7 @@ function App() {
             }
           />
 
-          {/* 404 page */}
+          {/* 404 */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AuthProvider>
