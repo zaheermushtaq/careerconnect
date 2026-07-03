@@ -1,7 +1,19 @@
 import axios from "axios";
 
-// Create axios instance with base URL pointing to our backend
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+let API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+// Ensure the API URL ends with /api (without a trailing slash for consistency)
+if (API_URL) {
+  // Remove trailing slash if present
+  if (API_URL.endsWith("/")) {
+    API_URL = API_URL.slice(0, -1);
+  }
+  // If it doesn't end with /api, append it
+  if (!API_URL.endsWith("/api")) {
+    API_URL = `${API_URL}/api`;
+  }
+}
+
 const API = axios.create({
   baseURL: API_URL,
 });
